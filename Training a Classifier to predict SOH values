@@ -1,0 +1,108 @@
+clc, close all
+selected_cell= 8; %It should be 8 or 7(two cases to be analyzed)
+
+load('.\Results\all_cell_summary.mat')
+load(['.\Results\cell_' num2str(selected_cell) '_SOH.mat'])
+load(['.\Results\cell_' num2str(selected_cell) '.mat'])
+
+%Extracting the best cycle Indices from the 'data_summary' variable based
+%onthe selected cell. The indices are obtained from 'idx_best_cycle' cell
+%array, the specific cell is accessed by using selected_cell-3 as the row
+%index. 
+cycles= data_summary.idx_best_cycle{selected_cell-3,1}(2:end);
+
+%The corresponding SOH values from the SOH cell array is retrieved,
+%excluding the first column.
+soh = SOH({3,2:end})';
+
+%The SOH values are smoothed using 'smmoth' function and the indices of
+%best cycles
+soh = smooth(soh(cycles));
+
+dsoh= 2; %Interval between two consecutive SOH values
+class= round(soh(end)):dsoh:round(soh(1)); 
+%class variable is defined as a range of SOH values based on the rounded minimum and maximum SOH values obtained earlier
+
+
+%Assigning label to each SOH value based on its proximity to the values in class range
+for i=1:length(soh)
+    idx = find(abs((soh(i)-class))<=1.8, 1, 'last');%Finding for each SOH value, the closest value in the 'class' range that is within this threshold
+    if numel(idx)>1 %if multiple matches are found, it uses the label from the previous iteration
+        soh_label(i,1) = soh_label(i-1,1);
+    else
+        soh_label(i,1) = class(idx); %otherwise it assigns the corresponding lael to the 'soh_label' variable
+    end
+end
+
+load('all_cell_vsample_count_summary.mat')
+
+%the variable 'input' is assigned the value of the cell at the fifth row and first column of the 'n_samples' variable
+input = n_samples{5,1}; 
+
+% The 'trainClassifier' function is called with 'input' and 'soh_label' as input arguments. 
+% It returns a trained Classifier model ('trainedClassifier') and the validation accuracy of the model.
+[trainedClassifier, validationAccuracy] = trainClassifier(input, soh_label);
+
+
+%The trained Classfier is used to predict SOH labels ('yfit_classfier') for the 'input' data 
+yfit_classifier = trainedClassifier.predictFcn(input);
+
+
+%Computing the validation RMSE by comparing the predicted SOH labels ('yfit_classifier') with the true SOH labels ('soh_label').
+%Missing values are exluded from the calculation.
+isNotMissing_class= ~isnan(yfit_classifier) & ~isnan(soh_label);
+validationRMSE_class = sqrt(nansum((yfit_classifier - soh_label).^2) / numel(soh_label(isNotMissing_class)));
+
+
+% A confusionmatrix ('C') is computed based on the true SOH labels ('soh_label') and the predecited SOH labels ('yfit_classifier').
+% The confusion matrix is then displayed as a normalized confusion chart.
+C= confusionmat(soh_label, yfit_classifier);
+confusionchart(C, 'RowSummary', 'row-normalized')
+
+figure
+plot(input, yfit_classifier, 'DisplayName', 'Predicted', 'MarkerSize', 18, 'Marker', '.', 'LineStyle', 'none','Color', [0.929 0.694 0.125])
+hold on
+plot(input, soh_label, 'DisplayName', 'True','MarkerSize', 18, 'Marker', '.','LineStyle','none', 'Color',[0 0.447 0.741])
+
+% Validate on another cell
+selected_cell = 4;  % it should be 4/5 or 6/9
+
+load('.\Results\all_cell_summary.mat')
+load(['.\Results\cell_' num2str(selected_cell) '_SOH.mat'])
+load(['.\Results\cell_' num2str(selected_cell) '.mat'])
+
+% Extracting the SOH for the best cycles
+cycles = data_summary.idx_best_cycle{selected_cell-3,1}(2:end);
+soh = [SOH{3,2:end}]';
+soh = smooth(soh(cycles));                                 
+dsoh = 2;
+class = round(soh(end)):dsoh:round(soh(1));
+for i = 1:length(soh)
+    idx = find(abs((soh(i)-class))<=1.9,1,'last');
+    if numel(idx)>1
+        soh_label_val(i,1) = soh_label_val(i-1,1);
+    else
+    soh_label_val(i,1) = class(idx);
+    end
+end
+
+input_val = n_samples{5,1};
+
+yfit_classifier_val = trainedClassifier.predictFcn(input_val);
+
+% Compute validation RMSE
+isNotMissing_class = ~isnan(yfit_classifier_val) & ~isnan(soh_label_val);
+validationRMSE_class = sqrt(nansum(( yfit_classifier_val - soh_label_val).^2) / numel(soh_label_val(isNotMissing_class)));
+
+C = confusionmat(soh_label_val,yfit_classifier_val);
+confusionchart(C,'RowSummary','row-normalized')
+figure
+plot(input_val, yfit_classifier_val,'DisplayName', 'Predicted', 'MarkerSize',18,...
+    'Marker','.',...
+    'LineStyle','none',...
+    'Color',[0.929 0.694 0.125])
+hold on
+plot(input_val, soh_label_val,'DisplayName', 'True', 'MarkerSize',18,...
+    'Marker','.',...
+    'LineStyle','none',...
+    'Color',[0 0.447 0.741])
